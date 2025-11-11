@@ -43,6 +43,6 @@ app.post("/api/users", async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Backend running on port ${PORT}`);
+  console.log(`🚀 Backend running on port is the number ${PORT}`);
 });
 

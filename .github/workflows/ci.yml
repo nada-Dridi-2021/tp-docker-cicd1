@@ -1,4 +1,4 @@
-name: CI - Test de Base
+name: CI - Build Docker Images
 
 on:
   push:
@@ -7,9 +7,28 @@ on:
     branches: [ main ]
 
 jobs:
-  hello:
+  build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Afficher un message
-        run: echo "CI fonctionne !"
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Build Backend Image
+        run: |
+          docker build -t tp-backend ./backend
+
+      - name: Build Frontend Image
+        run: |
+          docker build -t tp-frontend ./frontend
+
+      - name: Build Database Image
+        run: |
+          docker build -t tp-db ./database
+
+      - name: List Docker Images
+        run: |
+          docker images

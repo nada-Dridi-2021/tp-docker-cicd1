@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gestion des Utilisateurs</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <h1>👤 Gestion des utilisateurs</h1>
+
+  <form id="userForm">
+    <input type="text" id="name" placeholder="Nom" required />
+    <input type="email" id="email" placeholder="Email" required />
+    <button type="submit">Ajouter</button>
+  </form>
+
+  <h2>Liste des utilisateurs</h2>
+  <ul id="userList"></ul>
+
+  <script>
+    const API_URL = "http://localhost:3000/api/users";
+
+    // Charger les utilisateurs au démarrage
+    async function loadUsers() {
+      const res = await fetch(API_URL);
+      const users = await res.json();
+      const list = document.getElementById("userList");
+      list.innerHTML = "";
+      users.forEach(u => {
+        const li = document.createElement("li");
+        li.textContent = `${u.name} (${u.email})`;
+        list.appendChild(li);
+      });
+    }
+
+    // Ajouter un utilisateur
+    document.getElementById("userForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const name = document.getElementById("name").value;
+      const email = document.getElementById("email").value;
+
+      await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email })
+      });
+
+      document.getElementById("userForm").reset();
+      loadUsers();
+    });
+
+    loadUsers();
+  </script>
+</body>
+</html>
+

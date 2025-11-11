@@ -1,0 +1,42 @@
+version: "3.3"
+
+services:
+  backend:
+    build: ./backend
+    container_name: tp-backend
+    ports:
+      - "3000:3000"
+    environment:
+      - MONGO_URI=mongodb://mongo:27017/devopsTp2
+    depends_on:
+      - mongo
+    networks:
+      - webnet
+
+  frontend:
+    build: ./frontend
+    container_name: tp-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    networks:
+      - webnet
+
+  mongo:
+    image: mongo:4.4
+    container_name: tp-mongo
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - webnet
+
+volumes:
+  mongo_data:
+
+networks:
+  webnet:
+

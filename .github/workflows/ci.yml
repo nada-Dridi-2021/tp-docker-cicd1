@@ -25,10 +25,6 @@ jobs:
         run: |
           docker build -t tp-frontend ./frontend
 
-      - name: Build Database Image
-        run: |
-          docker build -t tp-db ./database
-
       - name: List Docker Images
         run: |
           docker images

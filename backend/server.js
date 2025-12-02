@@ -9,12 +9,24 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// Connexion MongoDB
-const mongoURI = process.env.MONGO_URI || "mongodb://localhost:27017/devopsTp2";
-mongoose
-  .connect(mongoURI)
-  .then(() => console.log("✅ Connecté à MongoDB"))
-  .catch((err) => console.error("❌ Erreur MongoDB:", err));
+// MongoDB Connection with retry logic
+const mongoURI = process.env.MONGO_URI || "mongodb://mongo:27017/devopsTp2";
+
+const connectWithRetry = () => {
+  console.log('Attempting MongoDB connection...');
+  mongoose
+    .connect(mongoURI, {
+      serverSelectionTimeoutMS: 5000, // Timeout after 5 seconds
+      socketTimeoutMS: 45000,
+    })
+    .then(() => console.log("✅ Connecté à MongoDB"))
+    .catch((err) => {
+      console.error("❌ Erreur MongoDB, retrying in 5 seconds...", err.message);
+      setTimeout(connectWithRetry, 5000);
+    });
+};
+
+connectWithRetry();
 
 // Exemple de modèle (collection "users")
 const userSchema = new mongoose.Schema({
@@ -30,19 +42,36 @@ app.get("/api", (req, res) => {
 
 // Route : afficher tous les utilisateurs
 app.get("/api/users", async (req, res) => {
-  const users = await User.find();
-  res.json(users);
+  try {
+    const users = await User.find();
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ error: "Database connection error" });
+  }
 });
 
 // Route : ajouter un utilisateur
 app.post("/api/users", async (req, res) => {
-  const { name, email } = req.body;
-  const user = new User({ name, email });
-  await user.save();
-  res.json({ message: "Utilisateur ajouté", user });
+  try {
+    const { name, email } = req.body;
+    const user = new User({ name, email });
+    await user.save();
+    res.json({ message: "Utilisateur ajouté", user });
+  } catch (error) {
+    res.status(500).json({ error: "Database connection error" });
+  }
+});
+
+// Health check endpoint
+app.get("/health", (req, res) => {
+  const mongoState = mongoose.connection.readyState;
+  if (mongoState === 1) {
+    res.json({ status: "healthy", database: "connected" });
+  } else {
+    res.status(503).json({ status: "unhealthy", database: "disconnected" });
+  }
 });
 
 app.listen(PORT, () => {
   console.log(`🚀 Backend running on port is the number ${PORT}`);
 });
-

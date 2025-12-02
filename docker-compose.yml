@@ -12,6 +12,8 @@ services:
       - mongo
     networks:
       - webnet
+    # Add restart policy and health check for mongo
+    restart: unless-stopped
 
   frontend:
     build: ./frontend
@@ -33,10 +35,15 @@ services:
       - mongo_data:/data/db
     networks:
       - webnet
+    # Add health check
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 10s
+      retries: 5
 
 volumes:
   mongo_data:
 
 networks:
   webnet:
-

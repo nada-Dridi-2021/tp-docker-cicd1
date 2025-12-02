@@ -1,37 +1,7 @@
 version: "3.8"
 
 services:
-  backend:
-    build: ./backend
-    container_name: tp-backend
-    ports:
-      - "3000:3000"
-    environment:
-      - MONGO_URI=mongodb://mongo:27017/devopsTp2
-      - NODE_ENV=development
-    depends_on:
-      mongo:
-        condition: service_healthy
-    networks:
-      - webnet
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  frontend:
-    build: ./frontend
-    container_name: tp-frontend
-    ports:
-      - "8080:80"
-    depends_on:
-      backend:
-        condition: service_healthy
-    networks:
-      - webnet
-
+  # MongoDB Database Service
   mongo:
     image: mongo:6.0
     container_name: tp-mongo
@@ -39,23 +9,58 @@ services:
     ports:
       - "27017:27017"
     volumes:
-      - mongo_data:/data/db
-      - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+      - mongodb_data:/data/db
+      - ./backend/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
     networks:
-      - webnet
+      - app-network
     environment:
       - MONGO_INITDB_DATABASE=devopsTp2
     healthcheck:
-      test: echo 'try { rs.status() } catch(err) { db.runCommand({ ping: 1 }) }' | mongosh --quiet
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
       interval: 10s
       timeout: 10s
       retries: 5
+      start_period: 30s
+    command: mongod --bind_ip_all
+
+  # Backend API Service
+  backend:
+    build: ./backend
+    container_name: tp-backend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - MONGO_URI=mongodb://mongo:27017/devopsTp2
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
       start_period: 40s
-    command: mongod --bind_ip_all --replSet rs0
+
+  # Frontend Service
+  frontend:
+    build: ./frontend
+    container_name: tp-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    networks:
+      - app-network
+    restart: unless-stopped
 
 volumes:
-  mongo_data:
+  mongodb_data:
 
 networks:
-  webnet:
+  app-network:
     driver: bridge

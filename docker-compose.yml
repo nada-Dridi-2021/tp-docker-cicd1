@@ -1,7 +1,7 @@
 version: "3.8"
 
 services:
-  # MongoDB must be defined FIRST
+  # MongoDB Service - MUST be first
   mongo:
     image: mongo:6.0
     container_name: tp-mongo
@@ -10,16 +10,19 @@ services:
       - "27017:27017"
     volumes:
       - mongodb_data:/data/db
-      - ./backend/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
     networks:
-      app-network:
-        aliases:
-          - mongodb
+      - app-network
     environment:
       - MONGO_INITDB_DATABASE=devopsTp2
-    command: mongod --bind_ip_all
+    command: mongod --bind_ip_all --replSet rs0
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
-  # Backend service
+  # Backend Service
   backend:
     build: ./backend
     container_name: tp-backend
@@ -28,17 +31,19 @@ services:
     environment:
       - NODE_ENV=development
       - PORT=3000
-      - MONGO_URI=mongodb://mongo:27017/devopsTp2?directConnection=true
+      - MONGO_URI=mongodb://mongo:27017/devopsTp2
     networks:
       - app-network
     depends_on:
-      - mongo
+      mongo:
+        condition: service_healthy
     restart: unless-stopped
-    # Add explicit links for DNS
-    links:
-      - mongo
+    # Add DNS settings
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
 
-  # Frontend service (optional)
+  # Frontend Service (if you have it)
   frontend:
     build: ./frontend
     container_name: tp-frontend
@@ -55,4 +60,6 @@ volumes:
 networks:
   app-network:
     driver: bridge
-    name: tp2-network
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

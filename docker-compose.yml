@@ -1,4 +1,4 @@
-version: "3.3"
+version: "3.8"
 
 services:
   backend:
@@ -8,12 +8,18 @@ services:
       - "3000:3000"
     environment:
       - MONGO_URI=mongodb://mongo:27017/devopsTp2
+      - NODE_ENV=development
     depends_on:
-      - mongo
+      mongo:
+        condition: service_healthy
     networks:
       - webnet
-    # Add restart policy and health check for mongo
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   frontend:
     build: ./frontend
@@ -21,29 +27,35 @@ services:
     ports:
       - "8080:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - webnet
 
   mongo:
-    image: mongo:4.4
+    image: mongo:6.0
     container_name: tp-mongo
     restart: always
     ports:
       - "27017:27017"
     volumes:
       - mongo_data:/data/db
+      - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
     networks:
       - webnet
-    # Add health check
+    environment:
+      - MONGO_INITDB_DATABASE=devopsTp2
     healthcheck:
-      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      test: echo 'try { rs.status() } catch(err) { db.runCommand({ ping: 1 }) }' | mongosh --quiet
       interval: 10s
       timeout: 10s
       retries: 5
+      start_period: 40s
+    command: mongod --bind_ip_all --replSet rs0
 
 volumes:
   mongo_data:
 
 networks:
   webnet:
+    driver: bridge

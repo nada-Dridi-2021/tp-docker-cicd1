@@ -9,9 +9,8 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// ========== ROUTES (define these BEFORE connection attempts) ==========
+// ========== ROUTES ==========
 
-// Root route
 app.get('/', (req, res) => {
   res.json({
     message: 'DevOps TP2 API is running',
@@ -27,7 +26,6 @@ app.get('/', (req, res) => {
   });
 });
 
-// Health check
 app.get('/health', (req, res) => {
   const dbStatus = mongoose.connection.readyState;
   if (dbStatus === 1) {
@@ -37,7 +35,6 @@ app.get('/health', (req, res) => {
   }
 });
 
-// API test
 app.get('/api', (req, res) => {
   res.json({ 
     message: 'API is working',
@@ -47,77 +44,61 @@ app.get('/api', (req, res) => {
 
 // ========== MONGODB CONNECTION ==========
 
-const mongoURI = process.env.MONGO_URI || "mongodb://localhost:27017/devopsTp2";
+const getMongoURI = () => {
+  // Production (Render) - use environment variable
+  if (process.env.NODE_ENV === 'production') {
+    return process.env.MONGO_URI;
+  }
+  // Development - use local MongoDB
+  return "mongodb://localhost:27017/devopsTp2";
+};
 
-console.log(`🔗 MongoDB URI: ${mongoURI}`);
+const mongoURI = getMongoURI();
 
-// Try multiple connection strategies
+console.log(`🔗 Environment: ${process.env.NODE_ENV || 'development'}`);
+console.log(`📡 MongoDB URI configured: ${mongoURI ? 'Yes' : 'No'}`);
+
+// Simple connection without retry logic for production
 const connectToMongoDB = async () => {
-  const connectionOptions = {
-    serverSelectionTimeoutMS: 10000,
-    socketTimeoutMS: 45000,
-    family: 4, // Use IPv4 only
-  };
-
   try {
-    console.log('🔄 Attempting to connect to MongoDB...');
+    console.log('🔄 Connecting to MongoDB...');
     
-    // Try primary connection
+    const connectionOptions = {
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+    };
+    
     await mongoose.connect(mongoURI, connectionOptions);
-    
     console.log('✅ MongoDB connected successfully!');
     console.log(`📊 Database: ${mongoose.connection.db.databaseName}`);
     
-    return true;
   } catch (error) {
-    console.error(`❌ Primary connection failed: ${error.message}`);
+    console.error('❌ MongoDB connection failed:', error.message);
     
-    // Try alternative connection methods
-    const alternativeURIs = [
-      "mongodb://host.docker.internal:27017/devopsTp2",
-      "mongodb://172.17.0.1:27017/devopsTp2",
-      "mongodb://localhost:27017/devopsTp2"
-    ];
-    
-    for (const altURI of alternativeURIs) {
-      try {
-        console.log(`🔄 Trying alternative: ${altURI}`);
-        await mongoose.connect(altURI, connectionOptions);
-        console.log(`✅ Connected via alternative: ${altURI}`);
-        return true;
-      } catch (altError) {
-        console.log(`❌ Alternative failed: ${altError.message}`);
-      }
+    // In production, don't try localhost alternatives
+    if (process.env.NODE_ENV === 'production') {
+      console.log('⚠️ Running without database in production mode');
+      throw error;
     }
     
-    throw error;
-  }
-};
-
-// Start connection with retries
-const startWithRetries = async (maxRetries = 10, delay = 5000) => {
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    // Only in development, try local alternatives
+    console.log('🔄 Trying localhost connection for development...');
     try {
-      await connectToMongoDB();
-      return; // Success!
-    } catch (error) {
-      console.log(`❌ Attempt ${attempt}/${maxRetries} failed: ${error.message}`);
-      
-      if (attempt < maxRetries) {
-        console.log(`⏳ Retrying in ${delay / 1000} seconds...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-      } else {
-        console.error('🚨 Max retries reached. Starting server without database.');
-      }
+      await mongoose.connect("mongodb://localhost:27017/devopsTp2", {
+        serverSelectionTimeoutMS: 5000
+      });
+      console.log('✅ Connected to local MongoDB');
+    } catch (localError) {
+      console.error('❌ Local connection also failed:', localError.message);
+      throw error;
     }
   }
 };
 
-// Initialize connection
-startWithRetries().then(() => {
-  console.log('✅ MongoDB initialization completed');
-}).catch(err => {
-  console.error('❌ MongoDB initialization failed:', err);
+// Connect to MongoDB
+connectToMongoDB().catch(err => {
+  console.error('❌ Failed to connect to MongoDB:', err.message);
+  console.log('🚀 Starting server anyway...');
 });
 
 // ========== DATABASE MODELS AND ROUTES ==========
@@ -130,9 +111,15 @@ const userSchema = new mongoose.Schema({
 
 const User = mongoose.model('User', userSchema);
 
-// Users routes
+// Users routes with error handling
 app.get('/api/users', async (req, res) => {
   try {
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({ 
+        error: 'Database not available',
+        connected: false 
+      });
+    }
     const users = await User.find();
     res.json(users);
   } catch (error) {
@@ -142,6 +129,12 @@ app.get('/api/users', async (req, res) => {
 
 app.post('/api/users', async (req, res) => {
   try {
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({ 
+        error: 'Database not available',
+        connected: false 
+      });
+    }
     const { name, email } = req.body;
     const user = new User({ name, email });
     await user.save();
@@ -153,6 +146,13 @@ app.post('/api/users', async (req, res) => {
 
 app.get('/api/test-db', async (req, res) => {
   try {
+    if (mongoose.connection.readyState !== 1) {
+      return res.json({
+        connected: false,
+        message: 'Database not connected',
+        readyState: mongoose.connection.readyState
+      });
+    }
     const count = await User.countDocuments();
     res.json({
       connected: true,
@@ -170,7 +170,7 @@ app.get('/api/test-db', async (req, res) => {
 // ========== START SERVER ==========
 
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
-  console.log(`📊 Health check: http://localhost:${PORT}/health`);
-  console.log(`🏠 Home page: http://localhost:${PORT}/`);
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📊 Health check: /health`);
+  console.log(`🏠 Home page: /`);
 });

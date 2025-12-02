@@ -3,12 +3,12 @@ FROM node:20-alpine
 WORKDIR /app
 
 # Copy package files
-COPY package*.json ./
+COPY package.json package-lock.json ./
 
-# Install dependencies (changed from npm ci to npm install)
+# Install dependencies
 RUN npm install --omit=dev
 
-# Copy application files
+# Copy application
 COPY . .
 
 EXPOSE 3000
